@@ -10,6 +10,22 @@
 - **MIDI Mapping & Hardware Profiles:** MIDI Learn on any control with soft takeover/pickup, plus built-in profiles for Novation Launch Control XL and Akai APC Key 25.
 - **Tempo & Preset Shuffling:** Beat/bar-synced automated preset sequencing driven by Manual BPM, Tap Tempo, live Audio BPM detection, or Ableton Link. Seamless Morph transitions preserve canvas trails.
 
+| MIDI Controller Mapping | Audio Reactivity & Spectrum |
+|:---:|:---:|
+| ![MIDI Mapping](docs/images/live_midi.png) | ![Audio Reactivity](docs/images/live_audio.png) |
+| *Hardware profiles, MIDI learn & active bindings* | *Multi-band FFT, AGC & dynamic modulation* |
+
+| Tempo & Preset Shuffling | NDI Video Streaming |
+|:---:|:---:|
+| ![Tempo & Preset Shuffling](docs/images/live_tempo_shuffle.png) | ![NDI Output](docs/images/live_ndi.png) |
+| *BPM clock, Ableton Link sync & playlist shuffling* | *High-framerate NDI broadcast with aspect presets* |
+
+<p align="center">
+  <img src="docs/images/live_slider_modulation.png" alt="Right-Click Modulation & MIDI Context Menu" width="550" />
+  <br>
+  <em>Right-click any slider, dropdown, or checkbox anywhere in the UI to MIDI Learn or assign live Audio Modulation</em>
+</p>
+
 ---
 
 ### About Fluoddity
