@@ -12,7 +12,6 @@ import numpy as np
 import moderngl
 from dataclasses import dataclass
 from state import UIState, SimState, CameraState, RecordingState
-from services.config_saver import ConfigSaver, PhysicsConfig
 from utilities.keybinding_management import KeybindingManager
 from utilities.paths import get_user_physics_configs_dir, get_app_physics_configs_dir
 
@@ -26,6 +25,7 @@ from .menu_bar import MenuBarMixin
 from .physics_window import PhysicsWindowMixin
 from .advanced_drawing_window import AdvancedDrawingWindowMixin
 from .field_loader_window import FieldLoaderWindowMixin
+from .live_window import LiveWindowMixin
 
 
 @dataclass
@@ -46,6 +46,7 @@ class UI(
     SliderWidgetsMixin,
     AdvancedDrawingWindowMixin,
     FieldLoaderWindowMixin,
+    LiveWindowMixin,
 ):
     """Passive UI - renders widgets, exposes state, handles no logic."""
 
@@ -55,6 +56,16 @@ class UI(
         self.view_option_labels = view_option_labels
         self.multi_load_service = multi_load_service
         self.param_lock_service = None  # Set by App after construction
+
+        # Live performance services (set by App after construction)
+        self.midi_service = None
+        self.audio_service = None
+        self.modulation_engine = None
+        self.tempo_clock = None
+        self.preset_shuffler = None
+        self.ndi_service = None
+        self._app_ref = None
+        self._init_live_window_state()
 
         # Initialize keybinding manager
         self.keybindings = KeybindingManager()
@@ -104,6 +115,7 @@ class UI(
         self.save_popup_open = False
         self.save_filename_buffer = ""
         # Physics configs: app dir for bundled (Core/Advanced), user dir for user-created
+        from services.config_saver import ConfigSaver, PhysicsConfig
         self.app_configs_dir = get_app_physics_configs_dir()
         self.user_configs_dir = get_user_physics_configs_dir()
         self.config_saver = ConfigSaver()
@@ -678,6 +690,9 @@ class UI(
 
         # Render field loader window (transient, not gated by sidebar)
         self.render_field_loader_window()
+
+        # Render Live Performance window (MIDI, Audio, Tempo/Shuffle, NDI)
+        self.render_live_window()
 
         if self.show_demo_window:
             imgui.show_demo_window()

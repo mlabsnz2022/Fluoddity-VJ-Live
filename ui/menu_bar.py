@@ -1,5 +1,6 @@
 """Main menu bar: File, Reset, Help, Extras menus with auto-close logic."""
 from imgui_bundle import imgui
+from state import save_preferences
 
 
 class MenuBarMixin:
@@ -278,6 +279,41 @@ class MenuBarMixin:
                     self._delayed_tooltip("Prevent the strafe components of the field\ntexture from being changed by loads/pastes.")
 
                     imgui.end_menu()
+
+            # Live Performance menu
+            if imgui.begin_menu("Live", not self.force_close_main_menus):
+                any_menu_open_this_frame = True
+                live_menu_min = imgui.get_window_pos()
+                live_menu_size = imgui.get_window_size()
+                menu_rectangles.append((live_menu_min.x, live_menu_min.y,
+                                       live_menu_min.x + live_menu_size.x,
+                                       live_menu_min.y + live_menu_size.y))
+
+                _, self.show_live_window = imgui.checkbox("Live Controls Window", getattr(self, 'show_live_window', False))
+
+                imgui.separator()
+                ndi = getattr(self, 'ndi_service', None)
+                if ndi:
+                    c_ndi, n_ndi = imgui.checkbox("NDI Broadcast", ndi.enabled)
+                    if c_ndi:
+                        ndi.set_enabled(n_ndi)
+                        self.state.preferences.ndi_enabled = n_ndi
+                        save_preferences(self.state.preferences)
+
+                clock = getattr(self, 'tempo_clock', None)
+                if clock:
+                    if imgui.menu_item("Tap Tempo", "", False)[0]:
+                        clock.tap()
+
+                shuffler = getattr(self, 'preset_shuffler', None)
+                if shuffler:
+                    _, shuffler.enabled = imgui.checkbox("Preset Auto-Shuffle", shuffler.enabled)
+                    if imgui.menu_item("Next Preset", "", False)[0]:
+                        app_ref = getattr(self, '_app_ref', None)
+                        if app_ref:
+                            shuffler.trigger_next(app_ref)
+
+                imgui.end_menu()
 
             # Help menu
             if imgui.begin_menu("Help", not self.force_close_main_menus):

@@ -13,9 +13,11 @@ out vec4 fragColor;
 
 vec3 inverse_asinh(vec3 color) {
     // Undo the asinh curve only; brightness stays baked in as linear intensity.
+    // Clamp to 85.0 to prevent float32 sinh overflow (max float32 is ~3.4e38, sinh(85) ~ 4.1e36)
     float len = length(color);
     if (len > 0.0) {
-        color = normalize(color) * sinh(len * tonemap_softness) / tonemap_softness;
+        float arg = min(len * tonemap_softness, 85.0);
+        color = normalize(color) * sinh(arg) / tonemap_softness;
     }
     return color;
 }
@@ -41,6 +43,9 @@ void main() {
         float brightness = max(color.r, max(color.g, color.b));
         color *= max(0.0, brightness - threshold) / max(brightness, 0.0001);
     }
+
+    // Sanitize non-finite values
+    if (isnan(color.r) || isinf(color.r)) color = vec3(0.0);
 
     fragColor = vec4(color, 1.0);
 }

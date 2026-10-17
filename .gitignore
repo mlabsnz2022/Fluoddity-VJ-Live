@@ -11,6 +11,8 @@ __pycache__/
 .Python
 
 # Virtual Environment
+.venv/
+scratch/
 Scratch.venv/
 venv/
 ENV/

@@ -77,6 +77,13 @@ class PreferencesState:
     # Parameter locks
     parameter_locks_enabled: bool = False  # Master toggle for parameter lock feature
 
+    # NDI output preferences
+    ndi_enabled: bool = False
+    ndi_stream_name: str = "Fluoddity"
+    ndi_resolution_preset: str = "16:9 (1920x1080)"
+    ndi_fit_mode: str = "Fill / Crop"
+    ndi_source_mode: str = "Camera"  # "Camera" (Interactive) or "World" (Fixed World Bounds)
+
 
 def save_preferences(prefs: PreferencesState, filepath: Path | str = None) -> None:
     """Save preferences to a JSON file."""

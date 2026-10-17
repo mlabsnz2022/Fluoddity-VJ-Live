@@ -43,6 +43,7 @@ class PreferencesWindowMixin:
                 step_fast=0.0,
                 format="%.2f"
             )
+            self.render_control_context_menu('prefs.world_size', "World Size", allow_audio=True)
 
             # Clamp to valid range
             if new_value < 0.02:
@@ -76,6 +77,7 @@ class PreferencesWindowMixin:
                         if selected:
                             imgui.set_item_default_focus()
                 imgui.end_combo()
+            self.render_control_context_menu('cycle.world_shape', "World Shape")
             self._delayed_tooltip("Changes the canvas aspect ratio.")
 
             imgui.separator()
@@ -105,6 +107,7 @@ class PreferencesWindowMixin:
                     v_max=30,
                     format=f"x%d ({current_hz}hz)"
                 )
+            self.render_control_context_menu('prefs.speedmult', "Physics Rate")
             self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
             # Motion blur checkbox (lock during recording)
@@ -115,6 +118,7 @@ class PreferencesWindowMixin:
                 "Motion Blur",
                 self.state.preferences.motion_blur
             )
+            self.render_control_context_menu('toggle.motion_blur', "Motion Blur")
             self._delayed_tooltip("EXPENSIVE- Multiple physics steps can be calculated each\nrender frame and blended together for faster physics.\nMotion blur can be costly for high frequencies,\ntry turning it off if things feel sluggish.")
 
             if recording_active:
@@ -136,6 +140,7 @@ class PreferencesWindowMixin:
                     1, 20,
                     format=blur_format
                 )
+                self.render_control_context_menu('prefs.blur_quality', "Blur Quality")
                 self._delayed_tooltip("Motion Blur can be expensive at high frequencies,\nskip some frames to improve performance")
                 imgui.unindent(20)
 
@@ -155,6 +160,7 @@ class PreferencesWindowMixin:
                 clicked, new_mode_idx = imgui.combo("Mouse Mode", current_mode_idx, mouse_modes)
                 if clicked:
                     self.state.preferences.mouse_mode = mouse_modes[new_mode_idx]
+                self.render_control_context_menu('cycle.mouse_mode', "Mouse Mode")
                 self._delayed_tooltip("In select Particle mode, clicking selects a particle rule to focus on.\nIn Draw trail mode, click and drag to leave trails on the canvas.\nSee Help->Controls for more")
 
             # Draw mode sliders (only show when in Draw Trail mode)
@@ -166,12 +172,14 @@ class PreferencesWindowMixin:
                     0.01, 0.5,
                     format="%.3f"
                 )
+                self.render_control_context_menu('prefs.draw_size', "Draw Size", allow_audio=True)
                 _, self.state.preferences.draw_power = imgui.slider_float(
                     "Draw Power",
                     self.state.preferences.draw_power,
                     0.1, 5.0,
                     format="%.2f"
                 )
+                self.render_control_context_menu('prefs.draw_power', "Draw Power", allow_audio=True)
                 imgui.unindent(20)
 
             imgui.separator()
@@ -190,6 +198,7 @@ class PreferencesWindowMixin:
                 current_item=self.state.sim.current_view_option,
                 items=view_items
             )
+            self.render_control_context_menu('cycle.view_mode', "Current View")
 
             if changed:
                 # cam_brush_mode is True for Camera (index 1) and Tiled (index 2)
@@ -206,6 +215,7 @@ class PreferencesWindowMixin:
                 "Physics Tooltips",
                 self.state.preferences.physics_tooltips_enabled
             )
+            self.render_control_context_menu('toggle.physics_tooltips', "Physics Tooltips")
             self._delayed_tooltip("Enable verbose tooltip and vector diagram for physics sliders.")
 
             # Arrow debug checkbox - label changes when advanced drawing is open
@@ -216,6 +226,7 @@ class PreferencesWindowMixin:
                 arrow_label,
                 self.state.preferences.debug_arrows
             )
+            self.render_control_context_menu('toggle.debug_arrows', "Debug Arrows")
             self._delayed_tooltip("Render a grid of arrows to help visualize the active draw target's vector field.")
 
             # Arrow sensitivity slider (only show when debug arrows enabled)
@@ -227,6 +238,7 @@ class PreferencesWindowMixin:
                     1.0, 20.0,
                     format="%.1f"
                 )
+                self.render_control_context_menu('prefs.arrow_sensitivity', "Arrow Sensitivity")
                 imgui.unindent(20)
 
             imgui.separator()
@@ -241,6 +253,7 @@ class PreferencesWindowMixin:
                 0.01, 10.0,
                 format="%.2f"
             )
+            self.render_control_context_menu('prefs.brightness', "Brightness", allow_audio=True)
             self._delayed_tooltip("Global brightness multiplier for the output.")
 
             # Tonemap Softness slider
@@ -250,6 +263,7 @@ class PreferencesWindowMixin:
                 0.1, 5.0,
                 format="%.2f"
             )
+            self.render_control_context_menu('prefs.tonemap_softness', "Tonemap Softness", allow_audio=True)
             self._delayed_tooltip("Controls highlight compression (asinh stretch).\nLow values = more linear (brighter highlights).\nHigh values = more logarithmic (reveals faint detail).")
 
             # Exposure / Cheap Blur slider
@@ -259,6 +273,7 @@ class PreferencesWindowMixin:
                 0.0, 1.0,
                 format="%.2f"
             )
+            self.render_control_context_menu('prefs.exposure', "Exposure", allow_audio=True)
             self._delayed_tooltip("Blend frames together for a cheap motion blur or set near 1 for a long exposure effect.")
 
             # Bloom checkbox + sliders (disabled in watercolor mode)
@@ -269,6 +284,7 @@ class PreferencesWindowMixin:
                 "Bloom",
                 self.state.preferences.bloom_enabled
             )
+            self.render_control_context_menu('toggle.bloom', "Bloom")
             if watercolor_active:
                 self._delayed_tooltip("Bloom is disabled in Watercolor mode.")
             else:
@@ -282,6 +298,7 @@ class PreferencesWindowMixin:
                     0.0, 2.0,
                     format="%.2f"
                 )
+                self.render_control_context_menu('prefs.bloom_threshold', "Bloom Threshold", allow_audio=True)
                 self._delayed_tooltip("Brightness cutoff for bloom extraction.\nLower = more glow everywhere.")
 
                 _, self.state.preferences.bloom_intensity = imgui.slider_float(
@@ -290,6 +307,7 @@ class PreferencesWindowMixin:
                     0.0, 3.0,
                     format="%.2f"
                 )
+                self.render_control_context_menu('prefs.bloom_intensity', "Bloom Intensity", allow_audio=True)
                 self._delayed_tooltip("Strength of the bloom glow.")
 
                 _, self.state.preferences.bloom_radius = imgui.slider_float(
@@ -298,6 +316,7 @@ class PreferencesWindowMixin:
                     0.1, 3.0,
                     format="%.2f"
                 )
+                self.render_control_context_menu('prefs.bloom_radius', "Bloom Radius", allow_audio=True)
                 self._delayed_tooltip("Spread of the bloom blur kernel.")
                 imgui.unindent(20)
             if watercolor_active:

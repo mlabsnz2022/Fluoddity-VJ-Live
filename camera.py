@@ -84,6 +84,12 @@ class Camera:
         # Bloom processor (lazily initialized on first use)
         self._bloom_processor = None
 
+        # Dedicated world-view resources for fixed-framing NDI streaming
+        self._world_target = None
+        self._world_fbo = None
+        self._world_assembler = None
+        self._world_bloom_processor = None
+
     def generate_view_texture(self, tiling_mode: bool = False):
         """Generate raw view texture (PRE-gamma correction) based on current mode.
 
@@ -197,6 +203,93 @@ class Camera:
             tonemap_softness=tonemap_softness,
         )
 
+    def render_world_texture(self, sim, ui_state, target_max_dim: int = 1920) -> moderngl.Texture:
+        """Render a clean, full-bounds view of the simulation world for NDI.
+
+        Framing is locked to (0, 0) and zoom=1.0 with the canvas aspect ratio,
+        allowing the desktop camera to be zoomed or panned without altering NDI output.
+        """
+        can_w, can_h = sim.get_canvas_dimensions()
+        ca = can_w / max(can_h, 1)
+
+        # Scale target dimension based on canvas aspect ratio
+        if ca >= 1.0:
+            world_w = target_max_dim
+            world_h = max(16, int(round(target_max_dim / ca)))
+        else:
+            world_h = target_max_dim
+            world_w = max(16, int(round(target_max_dim * ca)))
+
+        # Ensure world framebuffer and texture exist at this resolution
+        if (self._world_target is None or 
+            self._world_target.size != (world_w, world_h) or 
+            self._world_fbo is None):
+            if self._world_target is not None:
+                self._world_target.release()
+            if self._world_fbo is not None:
+                self._world_fbo.release()
+            self._world_target = self.ctx.texture((world_w, world_h), 4, dtype='f4')
+            self._world_fbo = self.ctx.framebuffer([self._world_target])
+            self._world_assembler = FrameAssembler(self.ctx, self._world_target)
+
+        view_opt = ui_state.sim.current_view_option
+        if view_opt == 0 or view_opt >= 3:
+            # Canvas or Field mode: directly assemble raw sim texture
+            raw_source = sim.view_tex
+        else:
+            # Camera / Tiled mode: render particles to world buffer
+            self._world_fbo.use()
+            self.ctx.viewport = (0, 0, world_w, world_h)
+            self.ctx.clear(0, 0, 0, 1)
+
+            self.cam_brush_program['cam_pos'].value = (0.0, 0.0)
+            self.cam_brush_program['cam_zoom'].value = 1.0
+            self.cam_brush_program['canvas_resolution'].value = (world_w, world_h)
+            self.cam_brush_program['window_size'].value = (world_w, world_h)
+            tryset(self.cam_brush_program, 'WATERCOLOR_MODE', self.watercolor_mode)
+            tryset(self.cam_brush_program, 'tiling_mode_enabled', False)
+
+            self.ctx.enable(moderngl.BLEND)
+            self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE
+            self.ctx.blend_equation = moderngl.FUNC_ADD
+
+            self.cam_brush_vao.render(mode=moderngl.TRIANGLE_FAN, instances=sim.entity_count, vertices=4)
+            self.ctx.disable(moderngl.BLEND)
+            raw_source = self._world_target
+
+        # Assemble and tonemap with single sample
+        assembled_tex = self._world_assembler.assemble_frame(
+            raw_source,
+            total_samples=1,
+            current_sample_index=0,
+            view_mode=view_opt,
+            screen_aspect=ca,
+            brightness=self.BRIGHTNESS,
+            exposure=0.0,
+            ink_weight=self.ink_weight,
+            watercolor_mode=self.watercolor_mode,
+            camera_position=(0.0, 0.0),
+            camera_zoom=1.0,
+            tonemap_softness=ui_state.preferences.tonemap_softness,
+            tiling_mode=False,
+            canvas_resolution=(world_w, world_h),
+        )
+
+        # Apply bloom if enabled
+        if ui_state.preferences.bloom_enabled and not self.watercolor_mode and assembled_tex is not None:
+            if self._world_bloom_processor is None:
+                from utilities.bloom import BloomProcessor
+                self._world_bloom_processor = BloomProcessor(self.ctx)
+            assembled_tex = self._world_bloom_processor.process(
+                assembled_tex,
+                ui_state.preferences.bloom_threshold,
+                ui_state.preferences.bloom_intensity,
+                ui_state.preferences.bloom_radius,
+                tonemap_softness=ui_state.preferences.tonemap_softness,
+            )
+
+        return assembled_tex
+
     def render(self, sim_going: bool = True, current_view_option: int = 1,
                 sweep_mode: bool = False, sweep_reticle_pos: tuple = (0.5, 0.5),
                 sweep_reticle_visible: bool = False, screen_aspect: float = 1.0,
@@ -266,6 +359,15 @@ class Camera:
         self.program['cam_zoom'].value = self.zoom
         self.program['tex_size'].value = TEX_TO_VIEW.size
         self.program['window_size'].value = (width, height)
+        tryset(self.program, 'screen_aspect', screen_aspect)
+        tryset(self.program, 'mouse_screen_coords', mouse_screen_coords)
+        tryset(self.program, 'TRAIL_DRAW_RADIUS', draw_size if draw_trail_mode else 0.0)
+        tryset(self.program, 'camera_zoom', self.zoom)
+        tryset(self.program, 'canvas_resolution', self.sim.get_canvas_dimensions())
+        tryset(self.program, 'PARAMETER_SWEEP_MODE', sweep_mode)
+        tryset(self.program, 'sweep_reticle_pos', sweep_reticle_pos)
+        tryset(self.program, 'sweep_reticle_visible', sweep_reticle_visible)
+        tryset(self.program, 'WATERCOLOR_MODE', watercolor_mode)
 
         if self.cam_brush_mode:
             tryset(self.program, 'cam_pos', (0, 0))

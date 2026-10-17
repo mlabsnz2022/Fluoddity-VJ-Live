@@ -29,6 +29,11 @@ Any advice or criticism is welcome. This is a toy I made for myself and I am mor
  - ffmpeg based video recording
  - Emboss visual effect (currently the only use for traditional density trails)
  - Experimental system for mixing different saved configs.
+ - **Live Performance Suite**:
+   - **NDI Video Streaming**: High-framerate output with 9 aspect presets (16:9, 9:16, 1:1, etc.) and Crop / Letterbox fit modes for Resolume, OBS, or NDI Studio Monitor.
+   - **Audio Reactivity**: Modulate any physics parameter by overall amplitude or frequency bands (Sub, Bass, Mids, Air) with real-time spectrum analysis, AGC, and transient beat detection.
+   - **MIDI Mapping & Hardware Profiles**: MIDI Learn on any control with soft takeover/pickup, plus built-in profiles for Novation Launch Control XL and Akai APC Key 25.
+   - **Tempo & Preset Shuffling**: Beat/bar-synced automated preset sequencing driven by Manual BPM, Tap Tempo, live Audio BPM detection, or Ableton Link. Seamless *Morph* transitions preserve canvas trails.
 ## Design
 Particles in Fluoddity have no direct interactions with each-other. Instead, they leave trails as they move. These trails decay and diffuse over time. Particles respond to the density and direction of trails around them.
 There is no fixed rule that determines how particles respond to their senses. Instead, each particle has a simple neural-net like brain with just 80 parameters. These parameters are randomized on startup, and then mutated as the user selects which lineages to explore.
@@ -79,10 +84,27 @@ Enforcing these symmetries drastically reduces the prevalence of boring and dege
    ```
 
 ## Usage
-Either:
-pip install requirements, then run main.py
-OR
-Download a release and run Fluoddity.exe 
+- **Quick start**: Double-click `run.bat` or run `.venv\Scripts\python.exe main.py`
+- Alternatively, run `python main.py` with dependencies installed.
+
+### Live Performance Guide
+Access live performance tools via the **Live** top menu or the **Live Performance Controls** window:
+- **MIDI**:
+  - Right-click any physics slider and click **MIDI Learn**, then move any hardware knob/fader/key to bind instantly.
+  - Or select your hardware profile (e.g. **Novation Launch Control XL** or **Akai APC Key 25**) in the MIDI tab and click **Load Profile** for complete out-of-the-box knob and button mappings.
+  - Soft takeover (pickup mode) is enabled by default to prevent sudden jumps when turning knobs.
+- **Audio Reactivity**:
+  - In the Audio tab, choose between your microphone/audio interface or WASAPI loopback (desktop audio).
+  - Right-click any physics slider -> **Modulate with Audio...** -> choose **Bass**, **Sub Bass**, **Overall Amplitude**, **Beat Transient**, or custom ranges.
+  - Modulated sliders glow with a cyan indicator and display live values: `[~value]`.
+- **Tempo & Preset Shuffling**:
+  - Set tempo using **Manual BPM**, **Tap Tempo**, live **Audio BPM detection**, or **Ableton Link** network sync.
+  - In **Tempo & Shuffle**, enable **Auto-Shuffle** to cycle presets every 1, 2, 4, 8, or 16 bars.
+  - *Morph* transition mode preserves canvas trails for continuous, organic visual flow.
+- **NDI Output**:
+  - In the NDI tab, toggle **Enable NDI Stream** to broadcast directly to Resolume Arena, OBS Studio, vMix, or TouchDesigner.
+  - Select from standard aspect formats including `16:9 (1920x1080)`, `9:16 (1080x1920)`, `1:1 (1080x1080)`, `4:5`, etc. with **Fill / Crop** or **Fit / Letterbox**.
+
 
 ## Building
 

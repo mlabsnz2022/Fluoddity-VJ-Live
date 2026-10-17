@@ -11,7 +11,8 @@ class SimulationRunner:
     """
 
     def __init__(self, sim, camera, video_service, command_handler, window,
-                 advanced_drawing_processor=None, controller_cam=None):
+                 advanced_drawing_processor=None, controller_cam=None,
+                 ndi_service=None):
         self.sim = sim
         self.camera = camera
         self.video_service = video_service
@@ -19,6 +20,7 @@ class SimulationRunner:
         self.window = window
         self.advanced_drawing_processor = advanced_drawing_processor
         self.controller_cam = controller_cam
+        self.ndi_service = ndi_service
 
         # Mouse tracking for draw trail mode
         self.prev_mouse_tex_coords = (0.0, 0.0)
@@ -306,6 +308,13 @@ class SimulationRunner:
                 ui_state.preferences.supersample_k,
                 ui_state.preferences.filename_prefix
             )
+        if self.ndi_service and self.ndi_service.enabled:
+            if getattr(self.ndi_service, 'source_mode', 'Camera') == 'World':
+                max_dim = max(self.ndi_service.output_width, self.ndi_service.output_height)
+                ndi_tex = self.camera.render_world_texture(self.sim, ui_state, target_max_dim=max_dim)
+                self.ndi_service.process_frame(ndi_tex)
+            else:
+                self.ndi_service.process_frame(assembled_tex)
 
     def _run_with_motion_blur(self, ui_state, speedmult, draw_mode,
                                mouse_tex_coords, draw_power_value,

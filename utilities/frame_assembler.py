@@ -138,16 +138,11 @@ class FrameAssembler:
         self.resources['shader']['is_first_frame'] = is_first_frame
         self.resources['shader']['final_sample'] = final_sample
         tryset(self.resources['shader'], 'view_mode', view_mode)
-        tryset(self.resources['shader'], 'PARAMETER_SWEEP_MODE', sweep_mode)
-        tryset(self.resources['shader'], 'sweep_reticle_pos', sweep_reticle_pos)
-        tryset(self.resources['shader'], 'sweep_reticle_visible', sweep_reticle_visible)
         tryset(self.resources['shader'], 'screen_aspect', screen_aspect)
         tryset(self.resources['shader'], 'BRIGHTNESS', brightness)
         tryset(self.resources['shader'], 'EXPOSURE', exposure)
         tryset(self.resources['shader'], 'INK_WEIGHT', ink_weight)
         tryset(self.resources['shader'], 'WATERCOLOR_MODE', watercolor_mode)
-        tryset(self.resources['shader'], 'TRAIL_DRAW_RADIUS', trail_draw_radius)
-        tryset(self.resources['shader'], 'mouse_screen_coords', mouse_screen_coords)
         # Camera uniforms
         tryset(self.resources['shader'], 'camera_position', camera_position)
         tryset(self.resources['shader'], 'camera_zoom', camera_zoom)
@@ -158,15 +153,10 @@ class FrameAssembler:
         tryset(self.resources['shader'], 'tiling_scale', tiling_scale)
         tryset(self.resources['shader'], 'canvas_resolution', canvas_resolution)
         tryset(self.resources['shader'], 'TONEMAP_SOFTNESS', tonemap_softness)
-        # Advanced drawing reticle uniforms
-        tryset(self.resources['shader'], 'brush_mode', brush_mode)
-        tryset(self.resources['shader'], 'fixed_direction_heading', fixed_direction_heading)
-        # Advanced drawing field texture and checkbox state
+        # Advanced drawing field texture and overlay opacity
         tryset(self.resources['shader'], 'field_texture', 3)
         tryset(self.resources['shader'], 'advanced_drawing_resources_initialized',
                advanced_drawing_resources_initialized)
-        tryset(self.resources['shader'], 'force_field_checked', force_field_checked)
-        tryset(self.resources['shader'], 'strafe_field_checked', strafe_field_checked)
         tryset(self.resources['shader'], 'draw_target_overlay_opacity', draw_target_overlay_opacity)
 
         # Render to accumulation buffer

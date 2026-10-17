@@ -23,9 +23,11 @@ class AdvancedDrawingWindowMixin:
             _, prefs.draw_size = imgui.slider_float(
                 "Draw Size##adv", prefs.draw_size, 0.01, 0.5, format="%.3f"
             )
+            self.render_control_context_menu('prefs.draw_size', "Draw Size", allow_audio=True)
             _, prefs.draw_power = imgui.slider_float(
                 "Draw Power##adv", prefs.draw_power, 0.1, 5.0, format="%.2f"
             )
+            self.render_control_context_menu('prefs.draw_power', "Draw Power", allow_audio=True)
 
             # === 2. Brush Mode Combo ===
             brush_modes = [
@@ -36,6 +38,7 @@ class AdvancedDrawingWindowMixin:
                 "Out - Repel",
             ]
             _, prefs.brush_mode = imgui.combo("Brush Mode", prefs.brush_mode, brush_modes)
+            self.render_control_context_menu('cycle.brush_mode', "Brush Mode")
 
             # === 3. Fixed Direction Heading slider ===
             _, prefs.fixed_direction_heading = imgui.slider_float(
@@ -45,6 +48,7 @@ class AdvancedDrawingWindowMixin:
                 math.pi,
                 format="%.3f",
             )
+            self.render_control_context_menu('prefs.fixed_direction_heading', "Brush Heading", allow_audio=True)
             self._delayed_tooltip(
                 "Heading angle for Fixed Direction brush mode.\n"
                 "0 = up (positive Y), PI/2 = right."
@@ -65,10 +69,12 @@ class AdvancedDrawingWindowMixin:
 
             if imgui.radio_button("Trails / Canvas", target == 0):
                 target = 0
+            self.render_control_context_menu('toggle.adv_canvas', "Draw Target: Canvas")
             self._delayed_tooltip("Draw on the particle trail canvas (existing behavior).")
 
             if imgui.radio_button("Force Field", target == 1):
                 target = 1
+            self.render_control_context_menu('toggle.adv_force_field', "Draw Target: Force Field")
             self._delayed_tooltip(
                 "Draw onto the force field texture.\n"
                 "Acts like any other force: some rules may 'swim upstream'."
@@ -76,6 +82,7 @@ class AdvancedDrawingWindowMixin:
 
             if imgui.radio_button("Strafe Field", target == 2):
                 target = 2
+            self.render_control_context_menu('toggle.adv_strafe_field', "Draw Target: Strafe Field")
             self._delayed_tooltip(
                 "Draw onto the strafe field texture.\n"
                 "All particles will be dragged in the direction of the field."
@@ -149,6 +156,7 @@ class AdvancedDrawingWindowMixin:
                 prefs.force_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_fpos)
             if pls:
                 pls.pop_locked_style(ffs_lock_colors)
+            self.render_control_context_menu('prefs.force_field_strength', "Force Field Strength", allow_audio=True)
             self._delayed_tooltip(
                 "Multiplier for force field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."
@@ -176,6 +184,7 @@ class AdvancedDrawingWindowMixin:
                 prefs.strafe_field_strength = 10.0 ** (FIELD_MIN_EXP + FIELD_EXP_RANGE * new_spos)
             if pls:
                 pls.pop_locked_style(sfs_lock_colors)
+            self.render_control_context_menu('prefs.strafe_field_strength', "Strafe Field Strength", allow_audio=True)
             self._delayed_tooltip(
                 "Multiplier for strafe field effects.\n"
                 "Logarithmic scale: 0.0001 to 10.0, default 1.0."
@@ -187,6 +196,7 @@ class AdvancedDrawingWindowMixin:
             _, prefs.debug_arrows = imgui.checkbox(
                 "View Draw Target Arrows", prefs.debug_arrows
             )
+            self.render_control_context_menu('toggle.debug_arrows', "Debug Arrows")
             self._delayed_tooltip(
                 "Render a grid of arrows to help visualize the active draw target's vector field."
             )
@@ -199,6 +209,7 @@ class AdvancedDrawingWindowMixin:
                 1.0,
                 format="%.2f",
             )
+            self.render_control_context_menu('prefs.draw_target_overlay_opacity', "Overlay Opacity", allow_audio=True)
             self._delayed_tooltip(
                 "Opacity of the force/strafe field color overlay in the main view.\n"
                 "0 = hidden, 1 = fully visible."

@@ -3,15 +3,10 @@ uniform sampler2D input_frame;
 uniform sampler2D accumulation_buffer;
 uniform sampler2D field_texture;                    // Force/Strafe field (.xy=force, .zw=strafe)
 uniform bool advanced_drawing_resources_initialized; // True when field_texture has valid data
-uniform bool force_field_checked;   // Whether Force Field checkbox is active
-uniform bool strafe_field_checked;  // Whether Strafe Field checkbox is active
 uniform float draw_target_overlay_opacity; // Opacity of field color overlay (0-1)
 uniform bool is_first_frame;
 uniform bool final_sample;
 uniform int view_mode;  // 0=can, 1=cam_brush, 2=tiled, 3=force, 4=strafe
-uniform bool PARAMETER_SWEEP_MODE;  // Whether parameter sweeps are active
-uniform vec2 sweep_reticle_pos;     // Screen UV position of sweep reticle (0-1 range)
-uniform bool sweep_reticle_visible; // Whether to show the reticle
 uniform float screen_aspect;        // Screen width/height for aspect-correct circles
 uniform float BRIGHTNESS;           // Global brightness multiplier (applied before gamma)
 uniform float EXPOSURE;//undo gamma from last frame and blend it with this frame, allows long exposure effect
@@ -19,13 +14,6 @@ uniform float TONEMAP_SOFTNESS;    // Asinh stretch parameter (higher = more hig
 #define BRIGHTNESS_CONSTANT (3.*BRIGHTNESS)
 uniform float INK_WEIGHT;           // Watercolor mode: controls optical density in exp()
 uniform bool WATERCOLOR_MODE;       // Whether to use watercolor rendering
-uniform float TRAIL_DRAW_RADIUS;    // Draw size for trail drawing overlay (0 when not active)
-uniform vec2 mouse_screen_coords;   // Mouse position in normalized screen coords (0-1)
-
-// Advanced drawing reticle uniforms
-// brush_mode codes: 0=mouse_dir, 1=inverse, 2=fixed, 3=attract, 4=repel
-uniform int brush_mode;
-uniform float fixed_direction_heading;
 
 // Camera state for screen-to-canvas UV conversion
 uniform vec2 camera_position;       // Camera position in world space
@@ -81,71 +69,6 @@ vec2 canvas_uv_to_screen(vec2 canvas_uv) {
     return ndc * 0.5 + 0.5;
 }
 
-vec3 sweep_overlay(vec2 uv_coord) {
-    uv_coord.y=1-uv_coord.y;//flip y axis
-    // Draw a crosshair/reticle at the sweep target position
-    if (!sweep_reticle_visible) {
-        return vec3(0.0);
-    }
-
-    // Calculate delta with aspect ratio correction for proper circles
-    vec2 delta = uv_coord - sweep_reticle_pos;
-    delta.x *= screen_aspect;  // Correct for aspect ratio
-
-    float dist = length(delta);
-
-    // Reticle parameters (in corrected space)
-    float inner_radius = 0.02;
-    float outer_radius = 0.03;
-    float line_thickness = 0.004;
-    float crosshair_length = 0.05;
-
-    // Circular ring
-    float ring = smoothstep(inner_radius - line_thickness, inner_radius, dist)
-               - smoothstep(outer_radius, outer_radius + line_thickness, dist);
-
-    // Crosshair lines extending from the ring (also aspect-corrected)
-    float cross_x = step(abs(delta.y), line_thickness)
-                  * step(outer_radius, abs(delta.x))
-                  * step(abs(delta.x), crosshair_length);
-    float cross_y = step(abs(delta.x), line_thickness)
-                  * step(outer_radius, abs(delta.y))
-                  * step(abs(delta.y), crosshair_length);
-
-    float reticle = max(ring, max(cross_x, cross_y));
-
-    // White reticle with slight transparency effect
-    return vec3(reticle * 0.8);
-}
-
-vec3 draw_overlay(vec2 uv_coord) {
-
-    // Draw a ring showing the trail drawing radius
-    if (TRAIL_DRAW_RADIUS <= 0.0) {
-        return vec3(0.0);
-    }
-
-    // Calculate delta in screen space with aspect correction
-    // Use mouse_screen_coords for the ring center
-    vec2 delta = uv_coord - vec2(0,1)-mouse_screen_coords*vec2(1,-1);
-    delta.x *= screen_aspect;
-
-    float dist = length(delta);
-
-    // Ring parameters - scale the radius to screen space
-    // TRAIL_DRAW_RADIUS is in canvas space (0-1), need to convert to screen space
-    float aspect_shrink = sqrt(min(canvas_resolution.x,canvas_resolution.y)/max(canvas_resolution.x,canvas_resolution.y));
-    aspect_shrink *= canvas_resolution.x>canvas_resolution.y?4./3.:1;//I have no idea why this is necessary but it works to make the reticle match the actual draw size very closely but not perfectly. @Claude why do we need this?
-    float radius = (aspect_shrink)*2*TRAIL_DRAW_RADIUS / camera_zoom;
-    float line_thickness = 0.003;
-
-    // Draw a thin ring at the draw radius
-    float ring = smoothstep(radius - line_thickness, radius, dist)
-               - smoothstep(radius, radius + line_thickness, dist);
-
-    // Return white or black depending on watercolor mode (like sweep_overlay)
-    return vec3(ring * 0.6);
-}
 vec2 safenorm(vec2 n){
     float l = length(n);
     return l>0?n/l:vec2(0);
@@ -272,13 +195,26 @@ void main() {
     // Add to or replace accumulation
     if (is_first_frame) {
         vec3 previous_frame = texture(accumulation_buffer, uv).rgb;
+        if (isnan(previous_frame.r) || isinf(previous_frame.r) ||
+            isnan(previous_frame.g) || isinf(previous_frame.g) ||
+            isnan(previous_frame.b) || isinf(previous_frame.b)) {
+            previous_frame = vec3(0.0);
+        }
         float previous_len = length(previous_frame);
-        previous_frame=safenorm(previous_frame)*sinh(previous_len*TONEMAP_SOFTNESS)/TONEMAP_SOFTNESS;
-        previous_frame/=BRIGHTNESS_CONSTANT;
-        fragColor = vec4(mix(current_color,previous_frame,EXPOSURE-.0001), 1.0);
+        float sinh_arg = min(previous_len * TONEMAP_SOFTNESS, 85.0);
+        previous_frame = safenorm(previous_frame) * sinh(sinh_arg) / TONEMAP_SOFTNESS;
+        previous_frame /= max(BRIGHTNESS_CONSTANT, 1e-4);
+        float exp_val = clamp(EXPOSURE, 0.0, 1.0);
+        fragColor = vec4(mix(current_color, previous_frame, exp_val), 1.0);
     } else {
         vec3 previous_accumulation = texture(accumulation_buffer, uv).rgb;
-        fragColor = vec4(previous_accumulation + (1.0001-EXPOSURE)*current_color, 1.0);
+        if (isnan(previous_accumulation.r) || isinf(previous_accumulation.r) ||
+            isnan(previous_accumulation.g) || isinf(previous_accumulation.g) ||
+            isnan(previous_accumulation.b) || isinf(previous_accumulation.b)) {
+            previous_accumulation = vec3(0.0);
+        }
+        float exp_val = clamp(EXPOSURE, 0.0, 1.0);
+        fragColor = vec4(previous_accumulation + (1.0 - exp_val) * current_color, 1.0);
     }
 
     // Apply gamma correction only on final sample (AFTER accumulation)
@@ -288,25 +224,23 @@ void main() {
             fragColor.xyz = 8*hsv2rgb(vec3(atan(fragColor.y,fragColor.x)/2./3.1415,.75,length(fragColor.xy)));
         }
         // Apply brightness multiplier before gamma correction
-
+        if (isnan(fragColor.r) || isinf(fragColor.r) ||
+            isnan(fragColor.g) || isinf(fragColor.g) ||
+            isnan(fragColor.b) || isinf(fragColor.b)) {
+            fragColor.xyz = vec3(0.0);
+        }
         fragColor.xyz *= BRIGHTNESS_CONSTANT;
         float len = length(fragColor.xyz);
         if (len > 0.0) {
-            fragColor.xyz *= asinh(len * TONEMAP_SOFTNESS) / (len * TONEMAP_SOFTNESS);
+            float scaled = len * TONEMAP_SOFTNESS;
+            float stretch = (scaled > 1e4) ? log(2.0 * scaled) / (len * TONEMAP_SOFTNESS) : asinh(scaled) / (len * TONEMAP_SOFTNESS);
+            fragColor.xyz *= stretch;
         }
-
-    
-        //Conditionally draw sweep reticle and mouse draw reticle
-        vec2 overlay_uv=uv;
-        if(view_mode == 0 || view_mode >= 3){overlay_uv = canvas_uv_to_screen(uv);}
-            if(PARAMETER_SWEEP_MODE){
-                fragColor.xyz += sweep_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
-            }
-            if(TRAIL_DRAW_RADIUS > 0.0 && EXPOSURE<.25){
-                fragColor.xyz += draw_overlay(overlay_uv)* (WATERCOLOR_MODE?-1:1);
-            }
-            //if(abs(fract(2.*length(screen_to_canvas_uv(uv)-.5)))<.01){fragColor.xyz=vec3(1);}
-        
+        if (isnan(fragColor.r) || isinf(fragColor.r) ||
+            isnan(fragColor.g) || isinf(fragColor.g) ||
+            isnan(fragColor.b) || isinf(fragColor.b)) {
+            fragColor.xyz = vec3(0.0);
+        }
 
         //conditionally draw field overlay
         //CURRENTLY TURNED OFF. MAYBE INCLUDE LATER

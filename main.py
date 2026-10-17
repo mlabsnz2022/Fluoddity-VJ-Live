@@ -15,6 +15,12 @@ from simulation_runner import SimulationRunner
 from camera_input import process_camera_input
 from controller_input import ControllerCam, process_controller_input, find_joystick
 from utilities.advanced_drawing import AdvancedDrawingProcessor
+from services.modulation import SignalBus, ModulationEngine
+from services.midi import MidiMappingManager, MidiService
+from services.audio import AudioService
+from services.tempo import TempoClock
+from services.preset_shuffler import PresetShuffler
+from services.ndi_output_service import NdiOutputService
 
 
 class App:
@@ -71,6 +77,37 @@ class App:
         self.ui.multi_load_service = self.multi_load_service
         self.ui.advanced_drawing_processor = self.advanced_drawing_processor
 
+        # Live performance services (MIDI, Audio, Tempo, Preset Shuffle, NDI)
+        self.signal_bus = SignalBus()
+        self.midi_mapping_manager = MidiMappingManager()
+        self.midi_mapping_manager.load_from_file()
+        self.midi_service = MidiService(self.midi_mapping_manager, self.signal_bus)
+        self.audio_service = AudioService(self.signal_bus)
+        self.modulation_engine = ModulationEngine(self.signal_bus)
+        self.modulation_engine.load_mappings()
+        self.tempo_clock = TempoClock(self.signal_bus)
+        self.preset_shuffler = PresetShuffler(self.config_saver)
+        self.ndi_service = NdiOutputService(self.ctx)
+        self.ndi_service.stream_name = loaded_prefs.ndi_stream_name
+        self.ndi_service.set_preset(loaded_prefs.ndi_resolution_preset)
+        self.ndi_service.set_fit_mode(loaded_prefs.ndi_fit_mode)
+        self.ndi_service.set_source_mode(loaded_prefs.ndi_source_mode)
+        if loaded_prefs.ndi_enabled:
+            self.ndi_service.set_enabled(True)
+
+        # Wire live performance services to UI
+        self.ui.midi_service = self.midi_service
+        self.ui.audio_service = self.audio_service
+        self.ui.modulation_engine = self.modulation_engine
+        self.ui.tempo_clock = self.tempo_clock
+        self.ui.preset_shuffler = self.preset_shuffler
+        self.ui.ndi_service = self.ndi_service
+        self.ui._app_ref = self
+
+        # Populate preset shuffler initial playlist
+        self.ui._refresh_config_files()
+        self.preset_shuffler.populate_from_categories(self.ui.config_files_by_category, ["Core"])
+
         # Physics configs directories
         self.app_configs_dir = get_app_physics_configs_dir()
         self.user_configs_dir = get_user_physics_configs_dir()
@@ -97,7 +134,8 @@ class App:
             self.sim, self.camera, self.video_service,
             self.command_handler, self.window,
             advanced_drawing_processor=self.advanced_drawing_processor,
-            controller_cam=self.controller_cam
+            controller_cam=self.controller_cam,
+            ndi_service=self.ndi_service
         )
 
         # Frame timing
@@ -161,15 +199,25 @@ class App:
         ui_state = self.ui.get_state()
         tiling_mode = (ui_state.sim.current_view_option == 2)
 
+        # 1.1. Live performance inputs, clocks, and triggers
+        current_time = time.time()
+        dt = current_time - self.last_update_time
+        self.last_update_time = current_time
+
+        self.audio_service.update()
+        flux = self.signal_bus.get_signal('audio.onset_flux', 0.0)
+        self.tempo_clock.bpm_detector.feed_onset(flux)
+        self.tempo_clock.update(dt)
+        self.midi_service.process_messages(ui_state)
+        self._process_modulation_actions(ui_state)
+        self.preset_shuffler.update(self.tempo_clock, self)
+
         # 2. Process one-shot commands
         result = self.command_handler.process_commands(ui_state, tiling_mode)
         if result == 'screenshot_pending' and not self.screenshot_pending and not self.screenshot_in_progress:
             self.screenshot_pending = True
 
         # 3. Process continuous input (camera movement)
-        current_time = time.time()
-        dt = current_time - self.last_update_time
-        self.last_update_time = current_time
         process_camera_input(ui_state, self.window, self.ui.keybindings,
                              self.sim.view_tex, dt)
         process_controller_input(self.controller_cam, self.joystick_state, dt)
@@ -220,7 +268,8 @@ class App:
         if ui_state.request_camera_reset:
             ui_state.camera.position[:] = [0.0, 0.0]
             ui_state.camera.zoom = 1.0
-        self.sim.apply_state(ui_state.sim)
+        effective_sim_state = self.modulation_engine.process_frame(ui_state)
+        self.sim.apply_state(effective_sim_state)
         self.sim.apply_camera_state(ui_state.camera)
         self.camera.apply_state(ui_state.camera)
         self.multi_load_service.apply_state(ui_state.multi_load)
@@ -288,6 +337,15 @@ class App:
         # 7. Render camera view
         self._render_camera_view(ui_state, sweep_mode, sweep_reticle_pos,
                                   sweep_reticle_visible, screen_aspect, tiling_mode)
+
+        # 7.1 Keep streaming over NDI even if simulation is paused
+        if not ui_state.sim.going and self.ndi_service.enabled:
+            if getattr(self.ndi_service, 'source_mode', 'Camera') == 'World':
+                max_dim = max(self.ndi_service.output_width, self.ndi_service.output_height)
+                world_frame = self.camera.render_world_texture(self.sim, ui_state, target_max_dim=max_dim)
+                self.ndi_service.process_frame(world_frame)
+            elif self.camera.assembled_texture:
+                self.ndi_service.process_frame(self.camera.assembled_texture)
 
         # 7.5. Render arrow debug overlay if enabled
         if ui_state.preferences.debug_arrows:
@@ -385,10 +443,51 @@ class App:
         self.screenshot_in_progress = False
         self.screenshot_saved_settings = {}
 
+    def _process_modulation_actions(self, ui_state):
+        """Execute one-shot actions triggered by MIDI notes/buttons or modulation events."""
+        actions = self.signal_bus.consume_actions()
+        for act in actions:
+            if act == 'action.next_preset':
+                self.preset_shuffler.trigger_next(self)
+            elif act == 'action.prev_preset':
+                self.preset_shuffler.trigger_prev(self)
+            elif act == 'action.random_preset':
+                self.preset_shuffler.trigger_random(self)
+            elif act == 'action.reset_sim':
+                self.sim.reset()
+            elif act == 'action.full_reset':
+                ui_state.request_full_reset = True
+            elif act == 'action.clear_canvas':
+                self.sim.clear_canvas()
+            elif act == 'action.randomize_mutations':
+                ui_state.request_randomize_mutations = True
+            elif act == 'action.toggle_pause':
+                ui_state.sim.going = not ui_state.sim.going
+            elif act == 'action.screenshot':
+                self.screenshot_pending = True
+            elif act == 'action.tap_tempo':
+                self.tempo_clock.tap()
+
     def cleanup(self):
         # Save preferences before cleanup
         ui_state = self.ui.get_state()
+        if self.ndi_service:
+            ui_state.preferences.ndi_enabled = self.ndi_service.enabled
+            ui_state.preferences.ndi_stream_name = self.ndi_service.stream_name
+            ui_state.preferences.ndi_resolution_preset = self.ndi_service.resolution_preset
+            ui_state.preferences.ndi_fit_mode = self.ndi_service.fit_mode
+            ui_state.preferences.ndi_source_mode = self.ndi_service.source_mode
         save_preferences(ui_state.preferences)
+
+        # Save live mappings and stop background threads
+        try:
+            self.midi_mapping_manager.save_to_file()
+            self.modulation_engine.save_mappings()
+            self.midi_service.stop()
+            self.audio_service.cleanup()
+            self.ndi_service.cleanup()
+        except Exception as e:
+            print(f"[Cleanup] Error shutting down live services: {e}")
 
         self.advanced_drawing_processor.cleanup()
         self.video_service.cleanup()

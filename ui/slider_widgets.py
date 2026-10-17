@@ -49,19 +49,32 @@ class SliderWidgetsMixin:
         jitter_amount = self.state.sim.jitters.get(param_name, 0.0) if jitter_param else 0.0
         has_jitter = jitter_amount > 0.0
 
-        # Apply orange tint when jitter is active
+        # Check if audio modulation is active on this parameter
+        mod_engine = getattr(self, 'modulation_engine', None)
+        target_id = f"sim.{param_name}"
+        is_modulated = mod_engine is not None and mod_engine.is_modulated(target_id)
+        mod_style_pushed = 0
+
+        # Apply orange tint when jitter is active, or cyan tint when modulated
         if has_jitter:
             imgui.push_style_color(imgui.Col_.frame_bg, imgui.ImVec4(0.4, 0.25, 0.1, 0.54))
             imgui.push_style_color(imgui.Col_.frame_bg_hovered, imgui.ImVec4(0.5, 0.3, 0.1, 0.7))
             imgui.push_style_color(imgui.Col_.frame_bg_active, imgui.ImVec4(0.6, 0.35, 0.1, 0.8))
             imgui.push_style_color(imgui.Col_.slider_grab, imgui.ImVec4(0.9, 0.6, 0.2, 1.0))
             imgui.push_style_color(imgui.Col_.slider_grab_active, imgui.ImVec4(1.0, 0.7, 0.3, 1.0))
+        elif is_modulated:
+            imgui.push_style_color(imgui.Col_.slider_grab, imgui.ImVec4(0.2, 0.85, 0.95, 1.0))
+            imgui.push_style_color(imgui.Col_.slider_grab_active, imgui.ImVec4(0.4, 1.0, 1.0, 1.0))
+            mod_style_pushed = 2
 
-        # Custom format showing jitter range when jitter is active
+        # Custom format showing jitter range when jitter is active, or live modulated value
         if has_jitter:
             jitter_min = value * (1.0 - jitter_amount)
             jitter_max = value * (1.0 + jitter_amount)
             display_format = f"%.3f ({jitter_min:.3f}, {jitter_max:.3f})"
+        elif is_modulated:
+            eff_val = mod_engine.get_effective_value(target_id, value)
+            display_format = f"%.3f [~{eff_val:.3f}]"
         else:
             display_format = format
 
@@ -74,15 +87,22 @@ class SliderWidgetsMixin:
         if pls and pls.handle_alt_click(param_name):
             changed, new_value = False, value
 
-        # Pop orange style colors
+        # Pop style colors
         if has_jitter:
             imgui.pop_style_color(5)
+        elif mod_style_pushed > 0:
+            imgui.pop_style_color(mod_style_pushed)
 
         # Show delayed tooltip explaining jitter when slider is orange-tinted
         if has_jitter:
             self._delayed_tooltip(
                 "Parameter varies randomly within the listed range.\n"
                 "Right-click for context menu with jitter slider."
+            )
+        elif is_modulated:
+            self._delayed_tooltip(
+                "Parameter is modulated by live audio.\n"
+                "Right-click to adjust modulation depth or signal source."
             )
 
         # Add context menu
@@ -178,9 +198,138 @@ class SliderWidgetsMixin:
             if imgui.button(button_label):
                 reset_requested = True
 
+            # --- Live Controls (MIDI & Audio Reactivity) ---
+            p_name = self._label_to_param_name(slider_name)
+            if p_name:
+                tid = f"sim.{p_name}"
+                imgui.separator()
+                imgui.text("Live Control")
+
+                # MIDI section
+                midi = getattr(self, 'midi_service', None)
+                if midi:
+                    bindings = midi.mapping_manager.target_to_bindings.get(tid, [])
+                    if bindings:
+                        b_strs = [f"{b.msg_type.upper()} {b.control}" for b in bindings]
+                        imgui.text_colored(imgui.ImVec4(0.3, 0.9, 0.4, 1.0), f"MIDI: {', '.join(b_strs)}")
+                        imgui.same_line()
+                        if imgui.button(f"Unbind##midi_{slider_name}"):
+                            midi.mapping_manager.remove_bindings_for_target(tid)
+                    else:
+                        if midi.learn_target_id == tid:
+                            imgui.text_colored(imgui.ImVec4(1.0, 0.8, 0.2, 1.0), "Listening for MIDI...")
+                            imgui.same_line()
+                            if imgui.button(f"Cancel##mlearn_{slider_name}"):
+                                midi.cancel_learn()
+                        else:
+                            if imgui.button(f"MIDI Learn##{slider_name}"):
+                                midi.start_learn(tid)
+                                imgui.close_current_popup()
+
+                # Audio section
+                mod_engine = getattr(self, 'modulation_engine', None)
+                if mod_engine:
+                    m = mod_engine.audio_mappings.get(tid)
+                    if m and m.enabled:
+                        disp_sig = m.signal_name.replace("audio.band_", "").replace("audio.", "")
+                        imgui.text_colored(imgui.ImVec4(0.2, 0.85, 0.95, 1.0), f"Audio Mod: {disp_sig}")
+                        changed_d, m.depth = imgui.slider_float(f"Depth##cmod_{slider_name}", m.depth, -1.0, 1.0, "%.2f")
+                        if imgui.button(f"Remove Audio Mod##{slider_name}"):
+                            mod_engine.remove_audio_mapping(tid)
+                    else:
+                        if imgui.begin_menu(f"Modulate with Audio...##{slider_name}"):
+                            for s_id, s_label in [
+                                ('audio.band_bass', 'Bass (60-250 Hz)'),
+                                ('audio.band_sub', 'Sub Bass (20-60 Hz)'),
+                                ('audio.amplitude', 'Overall Amplitude'),
+                                ('audio.onset_flux', 'Beat Transient'),
+                                ('audio.band_mid', 'Mid (500-2k Hz)'),
+                                ('audio.band_air', 'High / Air (6k-20k Hz)'),
+                                ('tempo.lfo_sine_4b', 'LFO 1 Bar (Sine)'),
+                                ('tempo.beat_pulse', 'Beat Pulse')
+                            ]:
+                                if imgui.menu_item(s_label, "", False)[0]:
+                                    mod_engine.add_or_update_audio_mapping(AudioModMapping(target_id=tid, signal_name=s_id, depth=0.4))
+                            imgui.end_menu()
+
             imgui.end_popup()
 
         return self.state.sim.slider_ranges[slider_name][0], self.state.sim.slider_ranges[slider_name][1], reset_requested, range_changed
+    def render_control_context_menu(self, target_id: str, label: str, allow_audio: bool = False):
+        """
+        Add a right-click context menu to any UI widget (slider, checkbox, dropdown, radio)
+        to inspect, MIDI Learn, or assign audio modulation.
+        Call this immediately after rendering the widget.
+        """
+        from services.modulation.targets import get_target
+        target = get_target(target_id)
+        if target is None:
+            return
+
+        if imgui.begin_popup_context_item(f"##ctx_{target_id}"):
+            # Auto-close if mouse moves too far away from popup
+            popup_pos = imgui.get_window_pos()
+            popup_size = imgui.get_window_size()
+            mouse_pos = imgui.get_mouse_pos()
+            dx = max(popup_pos.x - mouse_pos.x, 0, mouse_pos.x - (popup_pos.x + popup_size.x))
+            dy = max(popup_pos.y - mouse_pos.y, 0, mouse_pos.y - (popup_pos.y + popup_size.y))
+            if (dx * dx + dy * dy) ** 0.5 > self.state.preferences.menu_close_threshold:
+                imgui.close_current_popup()
+
+            imgui.text(f"Live Control: {label}")
+            imgui.text_disabled(f"Target: {target_id} [{target.target_type}]")
+            imgui.separator()
+
+            # MIDI section
+            midi = getattr(self, 'midi_service', None)
+            if midi:
+                bindings = midi.mapping_manager.target_to_bindings.get(target_id, [])
+                if bindings:
+                    b_strs = [f"{b.msg_type.upper()} {b.control} ({b.mode})" for b in bindings]
+                    imgui.text_colored(imgui.ImVec4(0.3, 0.9, 0.4, 1.0), f"MIDI: {', '.join(b_strs)}")
+                    imgui.same_line()
+                    if imgui.button(f"Unbind##midi_{target_id}"):
+                        midi.mapping_manager.remove_bindings_for_target(target_id)
+                else:
+                    if midi.learn_target_id == target_id:
+                        imgui.text_colored(imgui.ImVec4(1.0, 0.8, 0.2, 1.0), "Listening for MIDI (knob/fader/key)...")
+                        imgui.same_line()
+                        if imgui.button(f"Cancel##mlearn_{target_id}"):
+                            midi.cancel_learn()
+                    else:
+                        if imgui.button(f"MIDI Learn##{target_id}"):
+                            midi.start_learn(target_id)
+                            imgui.close_current_popup()
+
+            if allow_audio and target.target_type == "float":
+                mod_engine = getattr(self, 'modulation_engine', None)
+                if mod_engine:
+                    from services.modulation.engine import AudioModMapping
+                    imgui.separator()
+                    m = mod_engine.audio_mappings.get(target_id)
+                    if m and m.enabled:
+                        disp_sig = m.signal_name.replace("audio.band_", "").replace("audio.", "")
+                        imgui.text_colored(imgui.ImVec4(0.2, 0.85, 0.95, 1.0), f"Audio Mod: {disp_sig}")
+                        changed_d, m.depth = imgui.slider_float(f"Depth##cmod_{target_id}", m.depth, -1.0, 1.0, "%.2f")
+                        if imgui.button(f"Remove Audio Mod##{target_id}"):
+                            mod_engine.remove_audio_mapping(target_id)
+                    else:
+                        if imgui.begin_menu(f"Modulate with Audio...##{target_id}"):
+                            for s_id, s_label in [
+                                ('audio.band_bass', 'Bass (60-250 Hz)'),
+                                ('audio.band_sub', 'Sub Bass (20-60 Hz)'),
+                                ('audio.amplitude', 'Overall Amplitude'),
+                                ('audio.onset_flux', 'Beat Transient'),
+                                ('audio.band_mid', 'Mid (500-2k Hz)'),
+                                ('audio.band_air', 'High / Air (6k-20k Hz)'),
+                                ('tempo.lfo_sine_4b', 'LFO 1 Bar (Sine)'),
+                                ('tempo.beat_pulse', 'Beat Pulse')
+                            ]:
+                                if imgui.menu_item(s_label, "", False)[0]:
+                                    mod_engine.add_or_update_audio_mapping(AudioModMapping(target_id=target_id, signal_name=s_id, depth=0.4))
+                            imgui.end_menu()
+
+            imgui.end_popup()
 
     def render_aligned_label(self, label_text: str):
         """Render a right-justified label aligned to the longest label width for consistent button positioning.

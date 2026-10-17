@@ -78,6 +78,11 @@ def get_default_keyboard_controls_path() -> Path:
     return get_app_dir() / "default_keyboard_controls.json"
 
 
+def get_user_performance_dir() -> Path:
+    """Get path to Performance directory (for MIDI/Audio mappings and sets)."""
+    return get_user_data_dir() / "performance"
+
+
 def get_default_imgui_ini_path() -> Path:
     """Get path to bundled default_imgui.ini."""
     return get_app_dir() / "default_imgui.ini"
@@ -96,6 +101,7 @@ def initialize_user_data():
     get_user_physics_configs_dir().mkdir(exist_ok=True)
     get_screenshots_dir().mkdir(exist_ok=True)
     get_videos_dir().mkdir(exist_ok=True)
+    get_user_performance_dir().mkdir(exist_ok=True)
 
     # Copy default keyboard controls if user's doesn't exist
     user_keyboard = get_user_keyboard_controls_path()

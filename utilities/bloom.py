@@ -205,7 +205,8 @@ out vec4 fragColor;
 vec3 inverse_asinh(vec3 color) {
     float len = length(color);
     if (len > 0.0) {
-        color = normalize(color) * sinh(len * tonemap_softness) / tonemap_softness;
+        float arg = min(len * tonemap_softness, 85.0);
+        color = normalize(color) * sinh(arg) / tonemap_softness;
     }
     return color;
 }
@@ -213,7 +214,12 @@ vec3 inverse_asinh(vec3 color) {
 vec3 forward_asinh(vec3 color) {
     float len = length(color);
     if (len > 0.0) {
-        color *= asinh(len * tonemap_softness) / (len * tonemap_softness);
+        float scaled_len = len * tonemap_softness;
+        if (scaled_len > 1e6) {
+            color = normalize(color) * log(2.0 * scaled_len) / tonemap_softness;
+        } else {
+            color *= asinh(scaled_len) / scaled_len;
+        }
     }
     return color;
 }
@@ -221,9 +227,15 @@ vec3 forward_asinh(vec3 color) {
 void main() {
     vec3 original = texture(original_tex, uv).rgb;
     vec3 bloom = texture(bloom_tex, uv).rgb;
+    if (isnan(original.r) || isinf(original.r)) original = vec3(0.0);
+    if (isnan(bloom.r) || isinf(bloom.r)) bloom = vec3(0.0);
+
     // Undo asinh curve, add bloom in linear space, re-apply asinh
     vec3 linear_original = inverse_asinh(original);
     vec3 combined = linear_original + bloom * bloom_intensity;
-    fragColor = vec4(forward_asinh(combined), 1.0);
+    vec3 result = forward_asinh(combined);
+    if (isnan(result.r) || isinf(result.r)) result = vec3(0.0);
+    fragColor = vec4(result, 1.0);
 }
 """
+
