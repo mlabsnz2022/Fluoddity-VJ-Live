@@ -1,6 +1,18 @@
 
 ![bubbles 12 46 01 (1)](https://github.com/user-attachments/assets/ecd4a0dc-a11f-45b3-b603-b4e27e8e576b)
-# Fluoddity
+# Fluoddity (VJ / Live Performance Edition)
+
+> **Note:** This is a modified fork of the original [Fluoddity by aphid91](https://github.com/aphid91/Fluoddity), extended with real-time performance tools for VJs, visualists, and live stage production.
+
+## 🎛️ Live Performance Suite:
+- **NDI Video Streaming:** High-framerate output with 9 aspect presets (16:9, 9:16, 1:1, etc.) and Crop / Letterbox fit modes for Resolume, OBS, or NDI Studio Monitor.
+- **Audio Reactivity:** Modulate any physics parameter by overall amplitude or frequency bands (Sub, Bass, Mids, Air) with real-time spectrum analysis, AGC, and transient beat detection.
+- **MIDI Mapping & Hardware Profiles:** MIDI Learn on any control with soft takeover/pickup, plus built-in profiles for Novation Launch Control XL and Akai APC Key 25.
+- **Tempo & Preset Shuffling:** Beat/bar-synced automated preset sequencing driven by Manual BPM, Tap Tempo, live Audio BPM detection, or Ableton Link. Seamless Morph transitions preserve canvas trails.
+
+---
+
+### About Fluoddity
 I struggle to describe Fluoddity. Think somewhere between interactive lava lamp and evolvable ant farm. 
 Sometimes I'll see a meandering river, a candle flame, or branching lightning. Sometimes it's more like looking under a microscope as little amoebas devour each other and break apart. And sometimes, it's stranger than all that.
 
